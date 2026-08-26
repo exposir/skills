@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>会议室预订状态机原型</title>
+<style>
+  :root { --accent: #0f766e; --ink: #1f2937; --muted: #6b7280; --bg: #fafaf9; --card: #ffffff; --line: #e7e5e4; --bad: #b91c1c; --ok: #15803d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "PingFang SC", "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); line-height: 1.6; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  .question { font-size: 15px; color: var(--muted); margin-bottom: 32px; }
+  .question strong { color: var(--ink); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: var(--accent); text-transform: uppercase; letter-spacing: .04em; }
+  .state-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .field { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+  .field .k { font-size: 12px; color: var(--muted); }
+  .field .v { font-size: 16px; font-weight: 600; margin-top: 2px; }
+  .callout { margin-top: 14px; border-left: 3px solid var(--accent); padding: 8px 14px; background: #f0fdfa; border-radius: 0 8px 8px 0; font-size: 14px; }
+  .callout.bad { border-color: var(--bad); background: #fef2f2; }
+  .btns { display: flex; flex-wrap: wrap; gap: 10px; }
+  button { font: inherit; font-size: 14px; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--accent); background: #fff; color: var(--accent); cursor: pointer; }
+  button:hover { background: #f0fdfa; }
+  button.primary { background: var(--accent); color: #fff; }
+  button.primary:hover { background: #115e59; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  select, input { font: inherit; font-size: 14px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+  .history { font-size: 13px; }
+  .history table { width: 100%; border-collapse: collapse; }
+  .history th, .history td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  .history th { color: var(--muted); font-weight: 500; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .tab { border: 1px solid var(--line); color: var(--ink); background: #fff; }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .scenario-desc { font-size: 14px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; }
+  .scenario-desc .watch { color: var(--muted); margin-top: 6px; }
+  .steps { display: flex; flex-direction: column; gap: 8px; }
+  .step-row { display: flex; align-items: center; gap: 10px; }
+  .step-row .idx { width: 24px; height: 24px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); }
+  .step-row.done .idx { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .step-row.current button { box-shadow: 0 0 0 2px var(--accent); }
+  .scenario-end { font-size: 14px; color: var(--muted); margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>会议室预订状态机</h1>
+  <p class="question">要回答的问题：<strong>用户订了 14:00 的会议室，超时没到系统自动释放。他 14:30 赶到，想把同一时段抢回来，这条路径走得通吗？</strong>会不会出现"时段明明空着却订不上"，或"同一个人把时段占了两次"？</p>
+
+  <section>
+    <h2>当前状态</h2>
+    <div class="state-grid">
+      <div class="field"><div class="k">状态</div><div class="v" id="f-status">空闲</div></div>
+      <div class="field"><div class="k">持有人</div><div class="v" id="f-holder">无</div></div>
+      <div class="field"><div class="k">时段</div><div class="v" id="f-time">无</div></div>
+      <div class="field"><div class="k">张三的记录数</div><div class="v" id="f-zhang">0</div></div>
+      <div class="field"><div class="k">李四的记录数</div><div class="v" id="f-li">0</div></div>
+    </div>
+    <div class="callout" id="callout">还没有动作，点下面任意按钮开始。</div>
+  </section>
+
+  <section>
+    <h2>自由点击</h2>
+    <div class="btns">
+      <label>操作人 <select id="user"><option>张三</option><option>李四</option></select></label>
+      <label>时段 <input id="time" value="14:00" size="7"></label>
+      <button class="primary" onclick="doAction({type:'book', user: userSel(), time: timeVal()})">预订</button>
+      <button onclick="doAction({type:'cancel'})">取消</button>
+      <button onclick="doAction({type:'reschedule', newTime: prompt('改期到几点？', '15:00') || timeVal()})">改期</button>
+      <button onclick="doAction({type:'timeoutRelease'})">超时释放</button>
+      <button onclick="doAction({type:'startUse'})">开始使用</button>
+      <button onclick="doAction({type:'endUse'})">结束使用</button>
+      <button onclick="reset()">重置</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>引导场景</h2>
+    <div class="tabs" id="tabs"></div>
+    <div class="scenario-desc" id="scenario-desc"></div>
+    <div class="steps" id="steps"></div>
+    <div class="scenario-end" id="scenario-end"></div>
+  </section>
+
+  <section class="history">
+    <h2>历史记录</h2>
+    <table>
+      <thead><tr><th>#</th><th>谁</th><th>事件</th><th>详情</th></tr></thead>
+      <tbody id="history-body"></tbody>
+    </table>
+    <p id="history-empty" style="color:var(--muted)">还没有任何操作。</p>
+  </section>
+</div>
+
+<script>
+// 纯模块：不碰 DOM，不碰 document。这段可以原样拎进真实代码库。
+const RoomMachine = (() => {
+  const initial = () => ({ status: 'free', holder: null, time: null, history: [], lastChange: null });
+
+  const STATUS_LABEL = { free: '空闲', booked: '已预订', 'in-use': '使用中', ended: '已结束' };
+
+  const fail = (state, msg) => ({ ...state, lastChange: { ok: false, msg } });
+
+  const reduce = (state, action) => {
+    switch (action.type) {
+      case 'book': {
+        if (state.status !== 'free') {
+          return fail(state, '预订失败：房间当前是「' + STATUS_LABEL[state.status] + '」，只有「空闲」时段才能预订。');
+        }
+        return {
+          status: 'booked', holder: action.user, time: action.time,
+          history: [...state.history, { user: action.user, event: 'booked', detail: action.time }],
+          lastChange: { ok: true, msg: action.user + ' 成功预订 ' + action.time + '。' }
+        };
+      }
+      case 'cancel': {
+        if (state.status !== 'booked') return fail(state, '取消失败：当前不是「已预订」状态，没有可取消的预订。');
+        return {
+          status: 'free', holder: null, time: null,
+          history: [...state.history, { user: state.holder, event: 'cancelled', detail: '' }],
+          lastChange: { ok: true, msg: state.holder + ' 取消了预订，时段回到「空闲」。' }
+        };
+      }
+      case 'reschedule': {
+        if (state.status !== 'booked') return fail(state, '改期失败：当前不是「已预订」状态。');
+        return {
+          ...state, time: action.newTime,
+          history: [...state.history, { user: state.holder, event: 'rescheduled', detail: state.time + ' -> ' + action.newTime }],
+          lastChange: { ok: true, msg: state.holder + ' 改期到 ' + action.newTime + '。' }
+        };
+      }
+      case 'timeoutRelease': {
+        if (state.status !== 'booked') return fail(state, '超时释放失败：当前没有「已预订」的时段可释放。');
+        return {
+          status: 'free', holder: null, time: null,
+          history: [...state.history, { user: state.holder, event: 'timeout-released', detail: state.time }],
+          lastChange: { ok: true, msg: state.holder + ' 超时未到，系统自动释放了 ' + state.time + '。' }
+        };
+      }
+      case 'startUse': {
+        if (state.status !== 'booked') return fail(state, '开始使用失败：当前不是「已预订」状态。');
+        return {
+          ...state, status: 'in-use',
+          history: [...state.history, { user: state.holder, event: 'started', detail: '' }],
+          lastChange: { ok: true, msg: state.holder + ' 开始使用房间。' }
+        };
+      }
+      case 'endUse': {
+        if (state.status !== 'in-use') return fail(state, '结束使用失败：房间不在使用中。');
+        return {
+          status: 'ended',
+          history: [...state.history, { user: state.holder, event: 'ended', detail: '' }],
+          lastChange: { ok: true, msg: state.holder + ' 结束使用，时段进入「已结束」。' }
+        };
+      }
+      default:
+        return state;
+    }
+  };
+
+  return { initial, reduce, STATUS_LABEL };
+})();
+</script>
+
+<script>
+// 页面壳：只调用纯模块，反向没有任何东西流回模块里。
+let state = RoomMachine.initial();
+
+const SCENARIOS = [
+  {
+    name: '快乐路径',
+    desc: '正常的预订到结束全流程，验证基本动作都走得通。',
+    watch: '观察点：状态按 空闲 -> 已预订 -> 使用中 -> 已结束 一步步走。',
+    steps: [
+      { label: '张三预订 14:00', action: { type: 'book', user: '张三', time: '14:00' } },
+      { label: '张三开始使用', action: { type: 'startUse' } },
+      { label: '张三结束使用', action: { type: 'endUse' } }
+    ]
+  },
+  {
+    name: '超时后原主抢回',
+    desc: '张三订了 14:00 没到，系统超时释放。他 14:30 赶来，重新预订同一时段。',
+    watch: '观察点：抢回能否成功？历史里张三出现几次？如果业务上"同一个人不该留下两条记录"，这里就是缺口。',
+    steps: [
+      { label: '张三预订 14:00', action: { type: 'book', user: '张三', time: '14:00' } },
+      { label: '系统超时释放', action: { type: 'timeoutRelease' } },
+      { label: '张三重新预订 14:00', action: { type: 'book', user: '张三', time: '14:00' } }
+    ]
+  },
+  {
+    name: '非法操作拦截',
+    desc: '确认不该发生的操作都被挡住：别人抢已订时段、状态不对时乱点。',
+    watch: '观察点：每一步都应该报失败，状态保持不变。',
+    steps: [
+      { label: '张三预订 14:00', action: { type: 'book', user: '张三', time: '14:00' } },
+      { label: '李四想抢同一时段（应失败）', action: { type: 'book', user: '李四', time: '14:00' } },
+      { label: '还没开始用就结束（应失败）', action: { type: 'endUse' } },
+      { label: '超时释放', action: { type: 'timeoutRelease' } },
+      { label: '空房间上超时释放（应失败）', action: { type: 'timeoutRelease' } }
+    ]
+  }
+];
+
+let currentScenario = null;
+let currentStep = 0;
+
+const el = id => document.getElementById(id);
+
+function userSel() { return el('user').value; }
+function timeVal() { return el('time').value; }
+
+function doAction(action) {
+  state = RoomMachine.reduce(state, action);
+  render();
+  if (currentScenario !== null) {
+    currentStep++;
+    renderScenario();
+  }
+}
+
+function reset() {
+  state = RoomMachine.initial();
+  currentScenario = null;
+  currentStep = 0;
+  render();
+  renderScenario();
+}
+
+function render() {
+  el('f-status').textContent = RoomMachine.STATUS_LABEL[state.status];
+  el('f-holder').textContent = state.holder || '无';
+  el('f-time').textContent = state.time || '无';
+  const count = user => state.history.filter(h => h.user === user).length;
+  el('f-zhang').textContent = count('张三');
+  el('f-li').textContent = count('李四');
+
+  const c = el('callout');
+  if (state.lastChange) {
+    c.textContent = (state.lastChange.ok ? '刚才：' : '被拦：') + state.lastChange.msg;
+    c.className = 'callout' + (state.lastChange.ok ? '' : ' bad');
+  } else {
+    c.textContent = '还没有动作，点下面任意按钮开始。';
+    c.className = 'callout';
+  }
+
+  const body = el('history-body');
+  body.innerHTML = '';
+  el('history-empty').style.display = state.history.length ? 'none' : '';
+  state.history.forEach((h, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + (i + 1) + '</td><td>' + h.user + '</td><td>' + h.event + '</td><td>' + h.detail + '</td>';
+    body.appendChild(tr);
+  });
+}
+
+function renderScenario() {
+  const tabs = el('tabs');
+  tabs.innerHTML = '';
+  SCENARIOS.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.className = 'tab' + (i === currentScenario ? ' active' : '');
+    b.textContent = s.name;
+    b.onclick = () => startScenario(i);
+    tabs.appendChild(b);
+  });
+
+  const desc = el('scenario-desc');
+  const stepsBox = el('steps');
+  const endBox = el('scenario-end');
+  stepsBox.innerHTML = '';
+  if (currentScenario === null) {
+    desc.innerHTML = '';
+    endBox.textContent = '点上面任意一个标签开始场景，开始时会自动重置到初始状态。';
+    return;
+  }
+
+  const s = SCENARIOS[currentScenario];
+  desc.innerHTML = s.desc + '<div class="watch">' + s.watch + '</div>';
+
+  if (currentStep >= s.steps.length) {
+    endBox.textContent = '场景跑完。看看状态面板和历史记录，这条路径符合你的业务预期吗？';
+    return;
+  }
+  endBox.textContent = '';
+
+  s.steps.forEach((step, i) => {
+    const row = document.createElement('div');
+    row.className = 'step-row' + (i < currentStep ? ' done' : '') + (i === currentStep ? ' current' : '');
+    const idx = document.createElement('span');
+    idx.className = 'idx';
+    idx.textContent = i < currentStep ? '✓' : (i + 1);
+    const btn = document.createElement('button');
+    btn.textContent = step.label;
+    btn.disabled = i !== currentStep;
+    btn.onclick = () => doAction(step.action);
+    row.appendChild(idx);
+    row.appendChild(btn);
+    stepsBox.appendChild(row);
+  });
+}
+
+function startScenario(i) {
+  state = RoomMachine.initial();
+  currentScenario = i;
+  currentStep = 0;
+  render();
+  renderScenario();
+}
+
+render();
+renderScenario();
+</script>
+</body>
+</html>

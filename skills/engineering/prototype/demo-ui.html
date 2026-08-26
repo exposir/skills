@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>prototype: 团队仪表盘 UI 变体</title>
+<style>
+  :root { --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --bg:#f6f7f9; --card:#fff; --accent:#4f46e5; --ok:#16a34a; --warn:#d97706; --bad:#dc2626; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,"PingFang SC","Segoe UI",sans-serif; background:var(--bg); color:var(--ink); line-height:1.55; }
+  /* 页面壳：三个变体只替换 #app 内部的渲染子树，数据是同一份 */
+  .page-top { background:var(--card); border-bottom:1px solid var(--line); padding:18px 32px; }
+  .page-top h1 { font-size:20px; }
+  .page-top .sub { color:var(--muted); font-size:13px; margin-top:2px; }
+  #app { max-width:1200px; margin:0 auto; padding:24px 32px 120px; }
+
+  /* VariantA: KPI 卡片网格 */
+  .kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+  .kpi { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+  .kpi .label { font-size:12px; color:var(--muted); }
+  .kpi .value { font-size:26px; font-weight:700; margin-top:4px; }
+  .kpi .delta { font-size:12px; margin-top:2px; }
+  .up { color:var(--ok); } .down { color:var(--bad); }
+  .grid-2 { display:grid; grid-template-columns:1.4fr 1fr; gap:16px; margin-top:16px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; }
+  .panel h3 { font-size:14px; margin-bottom:12px; }
+  .bar { height:10px; background:var(--line); border-radius:5px; margin:10px 0 4px; }
+  .bar i { display:block; height:10px; border-radius:5px; background:var(--accent); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; }
+  .badge { font-size:11px; padding:2px 8px; border-radius:999px; background:#eef2ff; color:var(--accent); }
+
+  /* VariantB: 侧栏导航 */
+  .v-b { display:flex; gap:16px; }
+  .v-b aside { width:200px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; }
+  .v-b aside .nav { padding:8px 12px; border-radius:8px; font-size:14px; cursor:pointer; }
+  .v-b aside .nav.on { background:var(--accent); color:#fff; }
+  .v-b aside .nav:hover:not(.on) { background:#eef2ff; }
+  .v-b main { flex:1; }
+  .focus-panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:22px; }
+  .focus-panel .big { font-size:38px; font-weight:700; margin:8px 0; }
+  .spark { display:flex; align-items:flex-end; gap:6px; height:80px; margin-top:14px; }
+  .spark span { flex:1; background:var(--accent); border-radius:4px 4px 0 0; opacity:.85; }
+
+  /* VariantC: 时间线优先 */
+  .v-c { display:grid; grid-template-columns:1.6fr 1fr; gap:16px; }
+  .feed { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; }
+  .evt { display:flex; gap:12px; padding:12px 0; border-bottom:1px solid var(--line); }
+  .evt:last-child { border-bottom:none; }
+  .evt .t { font-size:12px; color:var(--muted); min-width:44px; padding-top:2px; }
+  .evt .c b { font-size:14px; }
+  .evt .c p { font-size:13px; color:var(--muted); }
+  .chips { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; }
+  .chip { display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px; }
+  .chip:last-child { border-bottom:none; }
+  .chip b { font-size:14px; }
+
+  /* 悬浮切换条：视觉上与页面明显区分，绝不混入被评估的设计 */
+  #switcher { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:14px; background:#111827; color:#fff; padding:10px 18px; border-radius:999px; box-shadow:0 8px 30px rgba(0,0,0,.35); font-size:14px; z-index:99; }
+  #switcher button { background:transparent; border:none; color:#fff; font-size:18px; cursor:pointer; padding:2px 10px; border-radius:6px; }
+  #switcher button:hover { background:rgba(255,255,255,.15); }
+  #switcher .tag { background:rgba(255,255,255,.12); padding:2px 10px; border-radius:999px; font-size:12px; margin-left:4px; }
+
+  /* 桩操作提示：原型不接真实变更，点按钮只弹这个 */
+  #toast { position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#111827; color:#fff; padding:10px 20px; border-radius:8px; font-size:13px; opacity:0; transition:opacity .2s; z-index:100; pointer-events:none; }
+  #toast.show { opacity:1; }
+</style>
+</head>
+<body>
+  <div class="page-top">
+    <h1>团队仪表盘</h1>
+    <div class="sub">PROTOTYPE, 用完就删。要回答的问题：这个总览页应该怎么布局？</div>
+  </div>
+  <div id="app"></div>
+
+  <div id="switcher">
+    <button id="prev" title="上一个变体 (←)">←</button>
+    <span id="label">A <span class="tag">KPI 网格</span></span>
+    <button id="next" title="下一个变体 (→)">→</button>
+  </div>
+  <div id="toast">原型桩：这里没接真实操作。</div>
+
+<script>
+// 三个变体共享同一份数据。变体间只允许换结构，不允许各写各的数据。
+const DATA = {
+  kpis: [
+    { label:'本周合并 MR', value:42, delta:'+8 vs 上周', up:true },
+    { label:'构建成功率', value:'98.2%', delta:'+0.4%', up:true },
+    { label:'线上告警', value:3, delta:'-5 vs 上周', up:true },
+    { label:'进行中 PR', value:11, delta:'+2', up:false },
+  ],
+  velocity: [
+    { week:'W1', v:34 }, { week:'W2', v:41 }, { week:'W3', v:38 }, { week:'W4', v:47 }, { week:'W5', v:42 },
+  ],
+  reviews: [
+    { pr:'#412 重构鉴权中间件', who:'李四', state:'待审查' },
+    { pr:'#407 修复导出内存泄漏', who:'张三', state:'审查中' },
+    { pr:'#399 计费字段迁移', who:'王五', state:'已通过' },
+    { pr:'#388 更新错误码文档', who:'赵六', state:'已通过' },
+  ],
+  feed: [
+    { t:'09:42', c:'李四 合并了 #407', d:'修复导出内存泄漏，含回归测试' },
+    { t:'09:15', c:'构建 #1288 通过', d:'main 分支，耗时 4m 12s' },
+    { t:'08:50', c:'张三 提交了 #412', d:'重构鉴权中间件，等审查' },
+    { t:'08:31', c:'告警恢复：API 延迟', d:'p95 从 1.8s 回到 240ms' },
+    { t:'昨天', c:'王五 合并了 #399', d:'计费字段迁移完成' },
+  ],
+};
+const VARIANT_META = { A:'KPI 网格', B:'侧栏导航', C:'时间线优先' };
+
+// 变体组件：每个都是一个清晰命名的渲染函数，只产出 HTML 字符串。
+function VariantA() {
+  const kpis = DATA.kpis.map(k => `
+    <div class="kpi">
+      <div class="label">${k.label}</div>
+      <div class="value">${k.value}</div>
+      <div class="delta ${k.up?'up':'down'}">${k.delta}</div>
+    </div>`).join('');
+  const bars = DATA.velocity.map(w => `
+    <div style="font-size:12px;color:var(--muted)">${w.week}</div>
+    <div class="bar"><i style="width:${w.v}%"></i></div>`).join('');
+  const rows = DATA.reviews.map(r => `
+    <tr><td>${r.pr}</td><td>${r.who}</td><td><span class="badge">${r.state}</span></td></tr>`).join('');
+  return `
+    <div class="kpi-row">${kpis}</div>
+    <div class="grid-2">
+      <div class="panel"><h3>合并速率（近 5 周）</h3>${bars}</div>
+      <div class="panel"><h3>待审 PR</h3><table><tr><th>PR</th><th>作者</th><th>状态</th></tr>${rows}</table></div>
+    </div>`;
+}
+
+function VariantB() {
+  const nav = ['总览','迭代','质量','告警','成员'].map((n,i) =>
+    `<div class="nav ${i===0?'on':''}" onclick="stub()">${n}</div>`).join('');
+  const spark = DATA.velocity.map(w => `<span style="height:${w.v}%"></span>`).join('');
+  return `
+    <div class="v-b">
+      <aside>${nav}</aside>
+      <main>
+        <div class="focus-panel">
+          <div class="label" style="color:var(--muted);font-size:13px">本周合并 MR（聚焦视图）</div>
+          <div class="big">42</div>
+          <div style="color:var(--ok);font-size:13px">+8 vs 上周</div>
+          <div class="spark">${spark}</div>
+          <div style="display:flex;gap:8px;margin-top:16px">
+            <button class="btn" style="background:var(--accent);color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer" onclick="stub()">查看迭代详情</button>
+            <button class="btn" style="background:#fff;border:1px solid var(--line);padding:8px 18px;border-radius:8px;cursor:pointer" onclick="stub()">导出报告</button>
+          </div>
+        </div>
+      </main>
+    </div>`;
+}
+
+function VariantC() {
+  const feed = DATA.feed.map(e => `
+    <div class="evt"><div class="t">${e.t}</div><div class="c"><b>${e.c}</b><p>${e.d}</p></div></div>`).join('');
+  const chips = DATA.kpis.map(k => `
+    <div class="chip"><span style="color:var(--muted)">${k.label}</span><b>${k.value}</b></div>`).join('');
+  return `
+    <div class="v-c">
+      <div class="feed"><h3 style="font-size:14px;margin-bottom:6px">团队动态</h3>${feed}</div>
+      <div class="chips"><h3 style="font-size:14px;margin-bottom:6px">关键指标</h3>${chips}</div>
+    </div>`;
+}
+
+const VARIANTS = { A: VariantA, B: VariantB, C: VariantC };
+const KEYS = Object.keys(VARIANTS);
+
+let current = new URLSearchParams(location.search).get('variant') || 'A';
+if (!VARIANTS[current]) current = 'A';
+
+function render() {
+  document.getElementById('app').innerHTML = VARIANTS[current]();
+  document.getElementById('label').innerHTML = `${current} <span class="tag">${VARIANT_META[current]}</span>`;
+}
+
+function cycle(dir) {
+  const i = (KEYS.indexOf(current) + dir + KEYS.length) % KEYS.length;
+  current = KEYS[i];
+  const url = new URL(location.href);
+  url.searchParams.set('variant', current);
+  history.replaceState(null, '', url);  // 真实项目里这里用 router.replace / navigate
+  render();
+}
+
+function stub() {
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), 1200);
+}
+
+document.getElementById('prev').onclick = () => cycle(-1);
+document.getElementById('next').onclick = () => cycle(1);
+document.addEventListener('keydown', e => {
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable) return;
+  if (e.key === 'ArrowLeft') cycle(-1);
+  if (e.key === 'ArrowRight') cycle(1);
+});
+
+// 真实项目里的生产隐藏检查：if (process.env.NODE_ENV === 'production') 则不渲染 #switcher
+render();
+</script>
+</body>
+</html>
